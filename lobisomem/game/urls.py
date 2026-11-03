@@ -8,4 +8,5 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("partidas/nova/", views.new_match, name="new"),
     path("partidas/<int:pk>/", views.detail, name="detail"),
+    path("partidas/<int:pk>/ao-vivo/", views.live, name="live"),
 ]

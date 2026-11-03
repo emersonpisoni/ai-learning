@@ -13,6 +13,8 @@ import random
 from collections import Counter
 
 from .engine import Action, EventKind, PlayerView, Role
+from .llm import get_client
+from .prompts import NOBODY, build_system, night_request, speak_request, vote_request
 
 SUSPICIONS = [
     "Achei {t} quieto demais ontem. Estou de olho.",
@@ -120,7 +122,65 @@ class RandomAgent:
         return Action(target=t, thought="Chute no escuro.")
 
 
-# Registro de tipos de agente. A próxima etapa adiciona "llm": LLMAgent.
+class LLMAgent:
+    """
+    Agente que decide usando um LLM.
+
+    Ele não guarda estado entre as chamadas: a cada decisão, monta o prompt do
+    zero a partir da PlayerView (o histórico que o jogador viu). Isso deixa o
+    agente simples e garante que ele nunca "lembre" de algo que não poderia saber.
+
+    Se a IA falhar (erro de rede, resposta sem ferramenta, recusa), o agente
+    faz uma jogada aleatória e avisa no pensamento. O jogo nunca para por isso.
+    """
+
+    def __init__(self, seed=None, personality: str = "", client=None) -> None:
+        self.personality = personality
+        self.client = client or get_client()
+        self.fallback = RandomAgent(seed=seed)
+
+    def _ask(self, view: PlayerView, request) -> dict | None:
+        prompt, tool = request
+        return self.client.call_tool(build_system(view, self.personality), prompt, tool)
+
+    @staticmethod
+    def _target(value) -> str | None:
+        return None if value in (None, "", NOBODY) else value
+
+    def _failed(self, action: Action) -> Action:
+        action.thought = f"⚠️ A IA não respondeu; jogada aleatória. ({action.thought})"
+        return action
+
+    # ----- Agent protocol -------------------------------------------------- #
+
+    def night_action(self, view: PlayerView) -> Action:
+        request = night_request(view)
+        if request is None:  # aldeão não age à noite: nem chama a IA
+            return Action(thought="Sou aldeão, só durmo.")
+        args = self._ask(view, request)
+        if not args:
+            return self._failed(self.fallback.night_action(view))
+        return Action(target=self._target(args.get("alvo")), thought=args.get("pensamento", ""))
+
+    def speak(self, view: PlayerView) -> Action:
+        args = self._ask(view, speak_request(view))
+        if not args or not args.get("fala"):
+            return self._failed(self.fallback.speak(view))
+        return Action(
+            target=self._target(args.get("acusado")),
+            text=args["fala"].strip(),
+            thought=args.get("pensamento", ""),
+        )
+
+    def vote(self, view: PlayerView) -> Action:
+        args = self._ask(view, vote_request(view))
+        if not args:
+            return self._failed(self.fallback.vote(view))
+        return Action(target=self._target(args.get("alvo")), thought=args.get("pensamento", ""))
+
+
+# Registro de tipos de agente: o nome guardado em Player.agent_type → a classe.
 AGENT_REGISTRY: dict[str, type] = {
     "random": RandomAgent,
+    "llm": LLMAgent,
 }

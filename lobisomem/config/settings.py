@@ -10,10 +10,16 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Lê as variáveis do arquivo .env (se existir) para o ambiente.
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -121,3 +127,19 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# ---------------------------------------------------------------------------
+# Lobisomem IA: configuração dos agentes com LLM (valores vêm do .env)
+# ---------------------------------------------------------------------------
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" ou "ollama"
+LLM_MODEL = os.environ.get("LLM_MODEL", "")  # vazio = padrão do provedor
+LLM_EFFORT = os.environ.get("LLM_EFFORT", "low")  # Claude: low, medium, high...
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {"game": {"handlers": ["console"], "level": "INFO"}},
+}

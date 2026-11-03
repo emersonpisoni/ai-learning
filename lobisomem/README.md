@@ -1,23 +1,45 @@
 # 🐺 Lobisomem IA
 
 Agentes de IA jogando Lobisomem entre si, com Python e Django.
-Projeto de estudo: Python, Django, e depois LLMs e agentes.
+Projeto de estudo: Python, Django, LLMs e agentes.
+
+📚 Nunca mexeu com Python ou Django? Comece pelo [ESTUDOS.md](ESTUDOS.md).
 
 ## Rodando
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv venv --python 3.13 --managed-python   # cria o .venv (ou: python3.13 -m venv .venv)
+source .venv/bin/activate
+uv pip install -r requirements.txt        # (ou: pip install -r requirements.txt)
 
 python manage.py migrate
 python manage.py createsuperuser   # opcional, para usar o /admin
 python manage.py runserver
 ```
 
-Abra http://127.0.0.1:8000, clique em **Nova partida** e use:
+Abra http://127.0.0.1:8000, escolha o tipo de agente, clique em **Nova partida** e use:
 - **👁️ Modo deus**: mostra os papéis secretos, os eventos privados (votos dos lobos, investigação da vidente, proteção do médico) e o que cada agente *pensou*.
 - **▶ Reproduzir**: reproduz a partida evento por evento, com a mesa reagindo.
+- Partidas com IA rodam em segundo plano e a página atualiza **ao vivo**. No modo deus, aparece também a personalidade de cada jogador 🤖.
+
+## Configurando a IA
+
+Copie o `.env.example` para `.env` e escolha um provedor:
+
+```bash
+cp .env.example .env
+```
+
+| | Claude (API da Anthropic) | Ollama (local) |
+|---|---|---|
+| `.env` | `LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY=...` | `LLM_PROVIDER=ollama` + `LLM_MODEL=llama3.1` |
+| Onde conseguir | chave em console.anthropic.com (cobrada à parte da assinatura do Claude) | `brew install ollama`, `ollama serve` e `ollama pull llama3.1` |
+| Custo | por uso | grátis |
+| Qualidade | alta, segue as ferramentas certinho | depende do modelo; os pequenos erram mais |
+
+O modelo padrão do Claude é o `claude-opus-5-5`, com `LLM_EFFORT=low` para as
+respostas virem rápido. Uma partida de 8 jogadores faz em torno de 100 a 150
+chamadas e leva alguns minutos. Para gastar menos, use `LLM_MODEL=claude-haiku-5-5`.
 
 ### Pelo terminal
 
@@ -25,6 +47,8 @@ Abra http://127.0.0.1:8000, clique em **Nova partida** e use:
 python manage.py simular --seed 42           # uma partida
 python manage.py simular --seed 42 --deus    # ...com os segredos
 python manage.py simular --partidas 1000     # estatísticas de vitória
+python manage.py simular --agente llm --deus  # partida com IA, ao vivo no terminal
+python manage.py simular --agente misto       # metade IA, metade aleatórios
 python manage.py test game                   # testes
 ```
 
@@ -33,14 +57,16 @@ python manage.py test game                   # testes
 ```
 game/
 ├── engine.py      ← REGRAS do jogo. Python puro, sem Django, sem IA.
-├── agents.py      ← Quem DECIDE. Hoje: RandomAgent. Amanhã: LLMAgent.
+├── agents.py      ← Quem DECIDE: RandomAgent e LLMAgent.
+├── prompts.py     ← Como o jogo vira texto (e ferramentas) para a IA.
+├── llm.py         ← Clientes de IA: Claude, Ollama e um falso para testes.
 ├── services.py    ← A PONTE: roda o engine e salva no banco.
 ├── models.py      ← Match, Player, GameEvent.
 ├── views.py       ← Telas (lista, nova partida, detalhe).
 ├── admin.py       ← Debug das partidas pelo /admin.
 ├── management/commands/simular.py
 ├── templates/ + static/   ← UI (CSS + JS puro)
-└── tests/         ← test_engine.py (rápido, sem banco) e test_services.py
+└── tests/         ← test_engine.py, test_services.py e test_llm.py (sem chamar IA de verdade)
 ```
 
 A separação é o principal ponto de estudo:
@@ -67,20 +93,22 @@ A separação é o principal ponto de estudo:
 
 Com agentes aleatórios e 8 jogadores, **os lobos vencem ~79% das partidas**
 (`simular --partidas 1000`). Isso é esperado: os aldeões votam quase no
-escuro. O objetivo da etapa 3 é fazer agentes LLM que mudem esse número.
+escuro. Agentes com IA deveriam mudar esse número; medir isso é a etapa 6.
 
 ## Roteiro
 
 - [x] **Etapa 1**: motor do jogo em Python puro + agentes aleatórios + testes
 - [x] **Etapa 2**: models do Django, admin, telas, modo deus e replay
-- [ ] **Etapa 3**: `LLMAgent`
-  - Transformar a `PlayerView` em prompt (papel, quem está vivo, histórico visível)
-  - Usar **tool calling** (`votar(jogador)`, `investigar(jogador)`…) ou saída estruturada para devolver uma `Action`
-  - Dar uma personalidade a cada agente (o campo `Player.personality` já existe)
-  - Registrar em `AGENT_REGISTRY["llm"]` e misturar agentes aleatórios e LLM na mesma partida
-- [ ] **Etapa 4**: tempo real
-  - Django Channels: o `save_event` em `services.py` também envia o evento pelo WebSocket
-  - Celery: rodar `game.step()` em background, fase por fase
+- [x] **Etapa 3**: `LLMAgent`
+  - A `PlayerView` vira prompt (`prompts.py`): regras, papel secreto, personalidade e o histórico que o jogador viu
+  - **Tool calling** com `strict`: as ferramentas `acao_noturna`, `falar` e `votar` têm um `enum` com os nomes válidos
+  - Provedores trocáveis por configuração (`llm.py`): Claude ou Ollama
+  - Se a IA falhar, o agente faz uma jogada aleatória e avisa no pensamento
+  - Modos de partida: só aleatórios, só IA, ou misto
+- [ ] **Etapa 4**: tempo real de verdade
+  - Hoje a página consulta o servidor a cada 2s (polling) e a partida roda numa thread
+  - Django Channels: o `save_event` em `services.py` envia o evento pelo WebSocket
+  - Celery: rodar a partida numa fila de tarefas em vez de uma thread
 - [ ] **Etapa 5**: jogador humano (um `HumanAgent` que espera a jogada vir da interface)
 - [ ] **Etapa 6**: torneio, comparando modelos, prompts e personalidades em centenas de partidas
 

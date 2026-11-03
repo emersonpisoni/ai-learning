@@ -3,11 +3,16 @@
 {% block content %}
 <section class="hero">
   <h1>Uma aldeia. Alguns lobos.<br>Ninguém confia em ninguém.</h1>
-  <p>Agentes jogam Lobisomem entre si. Por enquanto eles decidem no sorteio; em breve, com LLMs.</p>
+  <p>Agentes jogam Lobisomem entre si: alguns no sorteio, outros com IA de verdade.</p>
   <form method="post" action="{% url 'game:new' %}" class="new-match">
     {% csrf_token %}
     <label>Jogadores
       <input type="number" name="num_players" min="5" max="12" value="8">
+    </label>
+    <label>Agentes
+      <select name="agent_mode">
+        {% for value, label in agent_modes.items %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
     </label>
     <label>Seed <small>(opcional)</small>
       <input type="number" name="seed" min="0" placeholder="aleatória">
@@ -22,6 +27,7 @@
     <li>
       <a href="{{ match.get_absolute_url }}">
         <strong>#{{ match.pk }}</strong>
+        {% if match.uses_llm %}<span title="Partida com IA">🤖</span>{% endif %}
         <span class="muted">seed {{ match.seed }} · {{ match.players.all|length }} jogadores · {{ match.rounds_played }} rodada(s)</span>
         {% if match.winner == "aldeia" %}<span class="pill village">🏡 Aldeia venceu</span>
         {% elif match.winner == "lobisomens" %}<span class="pill wolves">🐺 Lobos venceram</span>

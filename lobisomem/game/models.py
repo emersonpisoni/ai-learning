@@ -11,12 +11,18 @@ class Match(models.Model):
         CREATED = "created", "Criada"
         RUNNING = "running", "Em andamento"
         FINISHED = "finished", "Finalizada"
+        ERROR = "error", "Erro"
 
     created_at = models.DateTimeField(auto_now_add=True)
     seed = models.PositiveIntegerField(help_text="Mesma seed = mesma partida (ótimo para debugar).")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.CREATED)
     winner = models.CharField(max_length=20, choices=[(t.value, t.value.title()) for t in Team], blank=True)
     rounds_played = models.PositiveIntegerField(default=0)
+    error = models.TextField(blank=True)
+
+    @property
+    def uses_llm(self) -> bool:
+        return any(p.agent_type == "llm" for p in self.players.all())
 
     class Meta:
         ordering = ["-created_at"]
