@@ -15,9 +15,9 @@ aqui traduz a nossa interface simples para a API dele.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
-import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
@@ -121,15 +121,30 @@ class OllamaClient:
     Usa só a biblioteca padrão do Python, sem dependências extras.
     """
 
-    def __init__(self, model: str = "llama3.1", url: str = "http://localhost:11434", timeout: float = 120) -> None:
+    def __init__(
+        self,
+        model: str = "llama3.1",
+        url: str = "http://localhost:11434",
+        timeout: float = 300,
+        think: bool = False,
+        num_ctx: int = 16384,
+    ) -> None:
         self.model = model
         self.url = url.rstrip("/")
         self.timeout = timeout
+        # Modelos como o Qwen3 "pensam" antes de responder: fica mais esperto,
+        # mas várias vezes mais lento. Desligado por padrão (OLLAMA_THINK no .env).
+        self.think = think
+        # Quanto texto o modelo lê por vez. O padrão do Ollama é menor que isso,
+        # e o histórico de uma partida longa passaria do limite.
+        self.num_ctx = num_ctx
 
     def call_tool(self, system: str, prompt: str, tool: ToolSpec) -> dict[str, Any] | None:
         body = {
             "model": self.model,
             "stream": False,
+            "think": self.think,
+            "options": {"num_ctx": self.num_ctx},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -149,7 +164,9 @@ class OllamaClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as resp:
                 data = json.load(resp)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        # OSError cobre servidor fora do ar, conexão caída no meio e timeout;
+        # HTTPException cobre respostas HTTP quebradas; ValueError, JSON inválido.
+        except (OSError, http.client.HTTPException, ValueError) as exc:
             logger.warning("Falha ao chamar o Ollama: %s", exc)
             return None
 
@@ -201,5 +218,10 @@ def get_client() -> LLMClient:
     if provider == "anthropic":
         return AnthropicClient(model=settings.LLM_MODEL or "claude-opus-5-5", effort=settings.LLM_EFFORT)
     if provider == "ollama":
-        return OllamaClient(model=settings.LLM_MODEL or "llama3.1", url=settings.OLLAMA_URL)
+        return OllamaClient(
+            model=settings.LLM_MODEL or "llama3.1",
+            url=settings.OLLAMA_URL,
+            think=settings.OLLAMA_THINK,
+            num_ctx=settings.OLLAMA_NUM_CTX,
+        )
     raise ValueError(f"LLM_PROVIDER desconhecido: {provider!r} (use 'anthropic' ou 'ollama').")

@@ -49,6 +49,9 @@ class PromptTests(unittest.TestCase):
         self.assertIn("Aldeão", villager)
         self.assertNotIn("aliados lobisomens são", villager)
 
+    def test_rules_warn_about_leaking_secrets(self):
+        self.assertIn("[secreto]", build_system(make_view(), ""))
+
     def test_history_shows_only_my_own_thoughts(self):
         events = [
             Event(1, Phase.DISCUSSION, EventKind.SPEECH, "Foi o Bruno!", actor="Ana", thought="chute meu"),
@@ -74,6 +77,19 @@ class PromptTests(unittest.TestCase):
             options = tool.parameters["properties"][field]["enum"]
             self.assertIn(NOBODY, options)
             self.assertNotIn("Ana", options)
+
+    def test_speech_prompt_lists_what_was_said_this_round(self):
+        events = [
+            Event(1, Phase.DISCUSSION, EventKind.SPEECH, "Fala velha", actor="Bruno"),
+            Event(2, Phase.DISCUSSION, EventKind.SPEECH, "Vamos manter a calma", actor="Carla"),
+            Event(1, Phase.DISCUSSION, EventKind.SPEECH, "Minha fala de ontem", actor="Ana"),
+        ]
+        prompt, _ = speak_request(make_view(events=events))
+        task = prompt.split("## Sua vez")[1]
+        self.assertIn('Carla: "Vamos manter a calma"', task)
+        self.assertNotIn("Fala velha", task)  # de outra rodada: fica só no histórico
+        self.assertIn("Minha fala de ontem", task)
+        self.assertIn("NÃO repita", task)
 
     def test_schemas_are_strict_compatible(self):
         """O modo strict exige additionalProperties=false e todos os campos obrigatórios."""
@@ -150,6 +166,14 @@ class OllamaClientTests(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", return_value=fake_response):
             result = OllamaClient().call_tool("sys", "prompt", ToolSpec("votar", "vota", {}))
         self.assertEqual(result, {"alvo": "Bruno"})
+
+    def test_dropped_connection_returns_none(self):
+        """O servidor caiu no meio da resposta: a jogada vira aleatória, a partida não para."""
+        import http.client
+
+        with mock.patch("urllib.request.urlopen", side_effect=http.client.RemoteDisconnected("caiu")), \
+                self.assertLogs("game.llm", level="WARNING"):
+            self.assertIsNone(OllamaClient().call_tool("sys", "prompt", ToolSpec("votar", "vota", {})))
 
     def test_connection_error_returns_none(self):
         import urllib.error

@@ -30,6 +30,9 @@ Como jogar bem:
 - Use o que aconteceu na partida: quem acusou quem, quem votou em quem, quem morreu e qual era o papel.
 - Se for lobo, minta de forma convincente e nunca revele sua identidade ou a dos aliados.
 - Se for da aldeia, desconfie com base em evidências, não em sorte.
+- Discussão boa é discussão concreta. Ficar só pedindo "calma" e "provas" não ajuda ninguém e deixa os lobos livres.
+- Só cite fatos que estão no histórico. Nunca invente acontecimentos.
+- O que aparece no histórico como [secreto] só você (e seus aliados) sabe. Nunca diga isso em voz alta por descuido: revelar um segredo só faz sentido como estratégia consciente (por exemplo, a vidente anunciando o que descobriu).
 - Sempre responda chamando a ferramenta pedida. O campo "pensamento" é privado: ninguém além de você o verá.
 """
 
@@ -151,6 +154,36 @@ def night_request(view: PlayerView) -> tuple[str, ToolSpec] | None:
     return _situation(view, task + " Use a ferramenta acao_noturna."), tool
 
 
+def _speak_task(view: PlayerView) -> str:
+    """
+    Instruções da fala. Modelos pequenos tendem a copiar o que acabaram de ler,
+    então listamos o que já foi dito nesta rodada e pedimos algo diferente.
+    """
+    said_now = [
+        f'- {e.actor}: "{e.content}"'
+        for e in view.events
+        if e.kind is EventKind.SPEECH and e.round == view.round and e.actor != view.me
+    ]
+    mine_before = [f'- "{e.content}"' for e in view.events if e.kind is EventKind.SPEECH and e.actor == view.me]
+
+    parts = ["É dia. Chegou sua vez de falar na discussão."]
+    if said_now:
+        parts.append("Já falaram nesta rodada:\n" + "\n".join(said_now))
+    if mine_before:
+        parts.append("Suas falas anteriores:\n" + "\n".join(mine_before))
+    parts.append(
+        "Regras para a sua fala:\n"
+        "- NÃO repita nem parafraseie o que já foi dito (nem por você). Traga um ponto novo.\n"
+        "- Seja específico: cite pelo menos um jogador pelo nome e o motivo (um voto, uma fala, uma morte, uma contradição).\n"
+        "- Na maioria das vezes, acuse alguém ou defenda alguém acusado. Só use 'ninguem' se tiver um bom motivo.\n"
+        "- Combine com a sua personalidade."
+    )
+    if view.round == 1 and not said_now:
+        parts.append("Você é o primeiro a falar e ainda há pouca informação: comente a noite e lance uma suspeita ou pergunta a alguém.")
+    parts.append("Use a ferramenta falar.")
+    return "\n\n".join(parts)
+
+
 def speak_request(view: PlayerView) -> tuple[str, ToolSpec]:
     options = view.others_alive + [NOBODY]
     tool = ToolSpec(
@@ -166,8 +199,7 @@ def speak_request(view: PlayerView) -> tuple[str, ToolSpec]:
             },
         }),
     )
-    task = "É dia. Chegou sua vez de falar na discussão. Use a ferramenta falar."
-    return _situation(view, task), tool
+    return _situation(view, _speak_task(view)), tool
 
 
 def vote_request(view: PlayerView) -> tuple[str, ToolSpec]:

@@ -136,6 +136,8 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" ou "ol
 LLM_MODEL = os.environ.get("LLM_MODEL", "")  # vazio = padrão do provedor
 LLM_EFFORT = os.environ.get("LLM_EFFORT", "low")  # Claude: low, medium, high...
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_THINK = os.environ.get("OLLAMA_THINK", "false").lower() in ("1", "true", "sim")
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
 
 LOGGING = {
     "version": 1,
