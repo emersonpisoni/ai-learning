@@ -1,0 +1,20 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Lobisomem{% endblock %} · Lobisomem IA</title>
+  <link rel="stylesheet" href="{% static 'game/style.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <a href="{% url 'game:index' %}" class="logo">🐺 Lobisomem <span>IA</span></a>
+    {% block topbar %}{% endblock %}
+  </header>
+  <main class="container">
+    {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

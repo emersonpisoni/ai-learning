@@ -1,0 +1,62 @@
+{% extends "game/base.html" %}
+{% load static %}
+{% block title %}Partida #{{ match.pk }}{% endblock %}
+
+{% block topbar %}
+<div class="controls">
+  <button type="button" id="replay">▶ Reproduzir</button>
+  <label class="toggle">
+    <input type="checkbox" id="god-mode">
+    <span>👁️ Modo deus</span>
+  </label>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="match-header">
+  <h1>Partida #{{ match.pk }}</h1>
+  <span class="muted">seed {{ match.seed }} · {{ match.rounds_played }} rodada(s)</span>
+  {% if match.winner == "aldeia" %}<span class="pill village">🏡 Aldeia venceu</span>
+  {% elif match.winner == "lobisomens" %}<span class="pill wolves">🐺 Lobos venceram</span>{% endif %}
+</div>
+
+<section class="table">
+  {% for p in players %}
+    <article class="player {% if not p.alive %}dead{% endif %} role-{{ p.role }}" data-name="{{ p.name }}">
+      <div class="avatar">{{ p.name|first }}</div>
+      <div class="name">{{ p.name }}</div>
+      <div class="role {% if p.alive %}secret{% endif %}">{{ p.get_role_display }}</div>
+    </article>
+  {% endfor %}
+</section>
+
+<section class="timeline" id="timeline">
+  {% for round, events in rounds %}
+    <h2 class="round-title">Rodada {{ round }}</h2>
+    {% for e in events %}
+      <div class="event kind-{{ e.kind }} {% if not e.is_public %}private{% endif %}"
+           data-kind="{{ e.kind }}" data-actor="{{ e.actor }}" data-target="{{ e.target }}">
+        {% if e.kind == "fala" %}
+          <div class="bubble-row">
+            <div class="avatar small">{{ e.actor|first }}</div>
+            <div class="bubble">
+              <strong>{{ e.actor }}</strong>
+              <p>{{ e.content }}</p>
+            </div>
+          </div>
+        {% else %}
+          {% if not e.is_public %}
+            <span class="tag">🔒 {% if e.visibility == "wolves" %}só lobos{% else %}só {{ e.visibility }}{% endif %}</span>
+          {% endif %}
+          <span class="content">{{ e.content }}</span>
+        {% endif %}
+        {% if e.thought %}<div class="thought">💭 <em>{{ e.actor }}</em> pensou: {{ e.thought }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'game/match.js' %}"></script>
+{% endblock %}
